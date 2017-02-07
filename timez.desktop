@@ -1,0 +1,11 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=TimeZ
+Exec=/usr/local/bin/start_timez.sh
+Comment=Clock with timezones around the Globe
+Categories=Utility;
+Terminal=false
+Icon[en_US]=mate-panel-clock
+Icon=mate-panel-clock

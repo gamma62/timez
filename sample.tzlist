@@ -1,0 +1,24 @@
+#
+# three columns, TAB separated, "Zone" "City" "Country", 
+# see /usr/share/zoneinfo
+#
+"Pacific/Midway"	"Midway"	"US"
+"America/Sitka"	"Sitka"	"US"
+"America/New_York"	"New York"	"US"
+"America/Sao_Paulo"	"Sao Paulo"	"Brazil"
+"Atlantic/Azores"	"Azores"	"Portugal"
+"Europe/London"	"London"	"UK"
+"Europe/Budapest"	"Budapest"	"Hungary"
+"Asia/Jerusalem"	"Jerusalem"	"Israel"
+"Europe/Moscow"	"Moscow"	"Russia"
+"Asia/Dubai"	"Dubai"	"UAE"
+"Asia/Karachi"	"Karachi"	"Pakistan"
+"Asia/Kolkata"	"Bangalore"	"India"
+"Asia/Kathmandu"	"Kathmandu"	"Nepal"
+"Asia/Dhaka"	"Dhaka"	"Bangladesh"
+"Asia/Tokyo"	"Tokyo"	"Japan"
+"Australia/Darwin"	"Alice Springs"	"Australia"
+"Australia/Sydney"	"Sydney"	"Australia"
+"Pacific/Auckland"	"Auckland"	"New Zealand"
+"Pacific/Chatham"	"Chatham"	"Pacific"
+"Pacific/Apia"	"Apia"	"Samoa"
