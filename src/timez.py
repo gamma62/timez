@@ -79,7 +79,6 @@ def get_tzlist():
                 while i < len(tzlist) and (offset+1440)%1440 >= (tzlist[i][3]+1440)%1440:
                     i = i+1
                 tzlist.insert(i, [zone, city, country, offset, hr])
-                #print '>>> "{}"\t"{}"\t"{}"'.format(zone, city, country, offset)
     return tzlist
 
 def tzlist_rotation(tzlist):
@@ -150,6 +149,7 @@ class TimesWindow(Gtk.Window):
         N = len(self.tzlist)
         for i in range(N):
             (zone, city, country, offset, hr) = self.tzlist[i]
+            #print '>>> "{}"\t"{}"\t"{}"'.format(zone, city, country, offset)
 
             evbox = Gtk.EventBox()
             evbox.set_border_width(0)
