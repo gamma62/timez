@@ -23,6 +23,7 @@ TZLIST = os.environ.get('HOME') + '/.timez'
 #--- configuration (adjust as you wish) ---
 workhours = (9, 18)   # "office hours"
 daylight = (6, 20)   # "personal sphere", the rest is night
+rotate_list_to_daylight = False   # or keep initial (East-West) list order
 
 #--- configuration (modify with care) ---
 # bg colors by phase
@@ -42,6 +43,22 @@ fface = ('monospace', 'sans')
 fsize = ('medium', 'small')
 #---------------------
 
+def something_like_usage(reason):
+    if reason == 'enoent' or reason == 'empty':
+        if reason == 'enoent':
+            print '>>>', TZLIST, 'file does not exist'
+        elif reason == 'empty':
+            print '>>>', TZLIST, 'file has no zone configuration'
+        print '>>> This file should contain something like this:'
+        print '# lines in this file must have TAB separated fields,'
+        print '# at least 3: Zone City Country'
+        print '# find valid Zone names in', ZONEINFO
+        print 'Pacific/Auckland	Auckland	New Zealand'
+        print 'Europe/Budapest	Budapest	Hungary'
+        print 'America/Halifax	Halifax	Canada'
+        print '>>> Have fun!'
+    quit()
+
 def get_tzlist():
     """
     Parse the list of timezones: TAB separated items, the first 3 will be used,
@@ -49,21 +66,8 @@ def get_tzlist():
     Maybe, the last item could be the optional icon name?
     """
     if not os.path.isfile(TZLIST):
-        print '>>>', TZLIST, 'file does not exist'
-        print '>>> This file should contain something like this:'
-        print '# lines in this file must have 3 TAB separated fields:'
-        print '# "Zone" "City" "Country"'
-        print '# find valid zone names in', ZONEINFO
-        print '"Europe/Budapest"	"Budapest"	"Hungary"'
-        print '"Pacific/Auckland"	"Auckland"	"New Zealand"'
-        print '>>> Have fun!'
-        quit()
-    #---
+        something_like_usage('enoent')
     tzlist = []
-    if set_zone('UTC'):
-        hr = int(time.strftime('%H'))
-        offset = base_offset()
-        tzlist.append(['UTC', 'UTC', 'Universal Time', offset, hr])
     citylen = 14
     with open(TZLIST, 'r') as f:
         for raw in f:
@@ -79,23 +83,28 @@ def get_tzlist():
                 offset = base_offset()
                 # East to West
                 i = 0
-                while i < len(tzlist) and (offset+1440)%1440 <= (tzlist[i][3]+1440)%1440:
+                while i < len(tzlist) and offset <= tzlist[i][-2]:
                     i = i+1
                 tzlist.insert(i, [zone, city, country, offset, hr])
                 if len(city) > citylen:
                     citylen = len(city)
+    if len(tzlist) == 0:
+        something_like_usage('empty')
     return (tzlist, citylen)
 
 def tzlist_rotation(tzlist):
     N = len(tzlist)
-    k = 1
-    # skip decreasing hours
-    while k < N and tzlist[k-1][-1] >= tzlist[k][-1]:
-        k = k+1
-    # skip rest of the day (bight hours) to have daylight hours on the top
-    k = k%N
-    while k < N and not (daylight[0] <= tzlist[k][-1] < daylight[1]):
-        k = k+1
+    k = 0
+    if rotate_list_to_daylight:
+        # focus window on work hours, rotate light hours together
+        k = 1
+        # skip decreasing hours
+        while k < N and tzlist[k-1][-1] >= tzlist[k][-1]:
+            k = k+1
+        # skip rest of the day (night hours) to have daylight hours on the top
+        k = k%N
+        while k < N and not (daylight[0] <= tzlist[k][-1] < daylight[1]):
+            k = k+1
     return k%N
 
 def set_zone(zone):
@@ -153,12 +162,13 @@ class TimesWindow(Gtk.Window):
         self.local_offset = home_offset
         (self.tzlist, self.citylen) = get_tzlist()
         self.timestamp = os.stat(TZLIST)[8]
-        self.rotation = 0
+        self.rotation = -1   # draw the icons once
         self.gui = []
 
         N = len(self.tzlist)
         for i in range(N):
             (zone, city, country, offset, hr) = self.tzlist[i]
+            print ">>> init gui", i, self.tzlist[i] 
 
             evbox = Gtk.EventBox()
             evbox.set_border_width(0)
@@ -206,9 +216,12 @@ class TimesWindow(Gtk.Window):
 
     def redraw_gui(self):
         N = len(self.tzlist)
-        rotation = tzlist_rotation(self.tzlist)
-        pix_update = (self.rotation != rotation)
-        self.rotation = rotation
+        if rotate_list_to_daylight or self.rotation == -1:
+            rotation = tzlist_rotation(self.tzlist)
+            pix_update = (self.rotation != rotation)
+            self.rotation = rotation
+        else:
+            pix_update = False
         for i in range(N):
             k = (self.rotation+i) % N
             # the tzlist source:

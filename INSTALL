@@ -3,16 +3,28 @@ Run it as easy: python timez.py
 
 Dependencies: python, python-gtk2, python-gi, gnome-icon-theme
 
-Install like a package:
 
-PREFIX shall be $HOME or maybe /usr/local
+Install like public a package, one example:
+
+PREFIX shall be /usr/local
 
 cp timez.py   $PREFIX/lib/python2.7/timez.py
 
 cp start_timez.sh   $PREFIX/bin/start_timez.sh
 chmod 755   $PREFIX/bin/start_timez.sh
 
+cp timez.desktop   $PREFIX/share/applications/timez.desktop
+
+
+Install for yourself, add to the applications menu:
+
+cp timez.py   $HOME/lib/python2.7/timez.py
+
+cp start_timez.sh   $HOME/bin/start_timez.sh
+chmod 755   $HOME/bin/start_timez.sh
+
 cp timez.desktop   $HOME/.local/share/applications/timez.desktop
+
 
 Configuration:
 

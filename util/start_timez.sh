@@ -1,5 +1,10 @@
 #!/bin/sh
 
+# this is for desktop environment where the window manager
+# can be configured with wmctrl
+# in this example: set the 'Always on top' flag
+
+#python $HOME/lib/python2.7/timez.py &
 python /usr/local/lib/python2.7/timez.py &
 PID=$!
 sleep 1
