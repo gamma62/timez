@@ -15,15 +15,16 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GObject
 from gi.repository.GdkPixbuf import Pixbuf
 
-#--- resources ---
+#--- resources (adjust to your system) ---
 ZONEINFO = '/usr/share/zoneinfo/'
-TZLIST = os.environ.get('HOME') + '/.tzlist'
 icons = {'UTC':'emblem-web', 'home':'gtk-home'}
+TZLIST = os.environ.get('HOME') + '/.timez'
 
-#--- configuration ---
-workhours = (9, 18)
-daylight = (6, 20)   # rest is night
-daystart = 2         # after midnight
+#--- configuration (adjust as you wish) ---
+workhours = (9, 18)   # "office hours"
+daylight = (6, 20)   # "personal sphere", the rest is night
+
+#--- configuration (modify with care) ---
 # bg colors by phase
 bgcolors = {'work':'grey97', \
             'day':'grey75', \
@@ -63,39 +64,46 @@ def get_tzlist():
         hr = int(time.strftime('%H'))
         offset = base_offset()
         tzlist.append(['UTC', 'UTC', 'Universal Time', offset, hr])
+    citylen = 14
     with open(TZLIST, 'r') as f:
         for raw in f:
             line = raw.strip()
             if len(line) == 0 or re.match(r'^[ \t]*#', line):
                 continue
             items = line.replace('"', '').split('\t')
-            # other fields are discarded now, maybe later... the Gtk icon name?
+            if len(items) < 3:
+                continue
             (zone, city, country) = items[:3]
             if zone != 'UTC' and set_zone(zone):
                 hr = int(time.strftime('%H'))
                 offset = base_offset()
-                # decreasing order by offset (minutes)
+                # East to West
                 i = 0
-                while i < len(tzlist) and (offset+1440)%1440 >= (tzlist[i][3]+1440)%1440:
+                while i < len(tzlist) and (offset+1440)%1440 <= (tzlist[i][3]+1440)%1440:
                     i = i+1
                 tzlist.insert(i, [zone, city, country, offset, hr])
-    return tzlist
+                if len(city) > citylen:
+                    citylen = len(city)
+    return (tzlist, citylen)
 
 def tzlist_rotation(tzlist):
     N = len(tzlist)
     k = 1
-    while k < N and tzlist[k-1][-1] <= tzlist[k][-1]:
+    # skip decreasing hours
+    while k < N and tzlist[k-1][-1] >= tzlist[k][-1]:
         k = k+1
-    while k < N and tzlist[k][-1] < daystart:
+    # skip rest of the day (bight hours) to have daylight hours on the top
+    k = k%N
+    while k < N and not (daylight[0] <= tzlist[k][-1] < daylight[1]):
         k = k+1
-    return k
+    return k%N
 
 def set_zone(zone):
     """
     Change timezone to zone after check. Return success of setting.
     """
     if not os.path.isfile(ZONEINFO+zone):
-        print 'Error:', ZONEINFO+zone, 'path not found, entry ignored'
+        print 'Error:', ZONEINFO+zone, 'path not found'
         return False
     os.environ['TZ'] = zone
     time.tzset()
@@ -133,6 +141,8 @@ def rel_offset(baseoff, target):
             s = '+%d:%02d' % (off/60, off%60)
     return s
 
+home_offset = base_offset()   # does not change, except with DST
+
 class TimesWindow(Gtk.Window):
 
     def __init__(self):
@@ -140,16 +150,15 @@ class TimesWindow(Gtk.Window):
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.add(vbox)
 
-        self.local_offset = base_offset()
-        self.home_offset = self.local_offset
-        self.tzlist = get_tzlist()
+        self.local_offset = home_offset
+        (self.tzlist, self.citylen) = get_tzlist()
+        self.timestamp = os.stat(TZLIST)[8]
         self.rotation = 0
         self.gui = []
 
         N = len(self.tzlist)
         for i in range(N):
             (zone, city, country, offset, hr) = self.tzlist[i]
-            #print '>>> "{}"\t"{}"\t"{}"'.format(zone, city, country, offset)
 
             evbox = Gtk.EventBox()
             evbox.set_border_width(0)
@@ -189,6 +198,12 @@ class TimesWindow(Gtk.Window):
         #---
         self.redraw_gui()
 
+    def refresh(self):
+        sec = time.gmtime()[5]
+        if sec == 0:
+            self.redraw_gui()
+        return True
+
     def redraw_gui(self):
         N = len(self.tzlist)
         rotation = tzlist_rotation(self.tzlist)
@@ -215,7 +230,7 @@ class TimesWindow(Gtk.Window):
                 liststore.clear()
                 if zone == 'UTC':
                     liststore.append([ Gtk.IconTheme.get_default().load_icon(icons['UTC'], 24, 0) ])
-                elif offset == self.home_offset:
+                elif offset == home_offset:
                     liststore.append([ Gtk.IconTheme.get_default().load_icon(icons['home'], 24, 0) ])
                 else:
                     liststore.append(row=None)
@@ -224,7 +239,7 @@ class TimesWindow(Gtk.Window):
             iconview.modify_bg(Gtk.StateType.NORMAL, bg)
             evbox.modify_bg(Gtk.StateType.NORMAL, bg)
 
-            if offset == self.home_offset or offset == self.local_offset:
+            if offset == home_offset or offset == self.local_offset:
                 fg = hcolors[phase][0], hcolors[phase][1]
             else:
                 fg = fgcolors[phase][0], fgcolors[phase][1]
@@ -233,25 +248,24 @@ class TimesWindow(Gtk.Window):
 
             # column width set by upper fields, monospace font char count: 17, 13, 6
             roff = rel_offset(self.local_offset, offset)
-            labels[0].set_markup(fmt0 + '%-17s' % city + '</span>')
-            labels[1].set_markup(fmt0 + '%-13s' % time.strftime('%H:%M') + '</span>')
+            fmt = '%-'+str(self.citylen+1)+'s'
+            labels[0].set_markup(fmt0 + fmt % city + '</span>')
+            labels[1].set_markup(fmt0 + '%-15s' % time.strftime('%H:%M') + '</span>')
             labels[2].set_markup(fmt0 + '%-6s' % roff + '</span>')
             labels[3].set_markup(fmt1 + country + '</span>')
             labels[4].set_markup(fmt1 + time.strftime('%a, %Y.%m.%d') + '</span>')
             labels[5].set_markup(fmt1 + time.strftime('%Z') + '</span>')
         #---
-        return True
+        return
 
     def timerstart(self):
         # the method must return True to continue
-        GObject.timeout_add(60000, self.redraw_gui)
+        GObject.timeout_add(1000, self.refresh)
 
     def on_click(self, widget, event, gui_index):
         N = len(self.tzlist)
         k = (self.rotation+gui_index) % N
-        offset = self.tzlist[k][3]
-        zone = self.tzlist[k][0]
-        #print '>>> click: (i:{} k:{} {}) offset {} -> {}'.format(gui_index, k, zone, self.local_offset, offset)
+        offset = self.tzlist[k][-2]
         self.local_offset = offset
         self.redraw_gui()
 
