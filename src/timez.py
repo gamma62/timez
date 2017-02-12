@@ -23,7 +23,6 @@ TZLIST = os.environ.get('HOME') + '/.timez'
 #--- configuration (adjust as you wish) ---
 workhours = (9, 18)   # "office hours"
 daylight = (6, 20)   # "personal sphere", the rest is night
-rotate_list_to_daylight = False   # or keep initial (East-West) list order
 
 #--- configuration (modify with care) ---
 # bg colors by phase
@@ -63,7 +62,6 @@ def get_tzlist():
     """
     Parse the list of timezones: TAB separated items, the first 3 will be used,
     skip empty and comment lines. Return the list.
-    Maybe, the last item could be the optional icon name?
     """
     if not os.path.isfile(TZLIST):
         something_like_usage('enoent')
@@ -79,7 +77,7 @@ def get_tzlist():
                 continue
             (zone, city, country) = items[:3]
             if zone != 'UTC' and set_zone(zone):
-                hr = int(time.strftime('%H'))
+                hr = time.localtime()[3]
                 offset = base_offset()
                 # East to West
                 i = 0
@@ -91,21 +89,6 @@ def get_tzlist():
     if len(tzlist) == 0:
         something_like_usage('empty')
     return (tzlist, citylen)
-
-def tzlist_rotation(tzlist):
-    N = len(tzlist)
-    k = 0
-    if rotate_list_to_daylight:
-        # focus window on work hours, rotate light hours together
-        k = 1
-        # skip decreasing hours
-        while k < N and tzlist[k-1][-1] >= tzlist[k][-1]:
-            k = k+1
-        # skip rest of the day (night hours) to have daylight hours on the top
-        k = k%N
-        while k < N and not (daylight[0] <= tzlist[k][-1] < daylight[1]):
-            k = k+1
-    return k%N
 
 def set_zone(zone):
     """
@@ -162,13 +145,11 @@ class TimesWindow(Gtk.Window):
         self.local_offset = home_offset
         (self.tzlist, self.citylen) = get_tzlist()
         self.timestamp = os.stat(TZLIST)[8]
-        self.rotation = -1   # draw the icons once
         self.gui = []
 
         N = len(self.tzlist)
         for i in range(N):
             (zone, city, country, offset, hr) = self.tzlist[i]
-            print ">>> init gui", i, self.tzlist[i] 
 
             evbox = Gtk.EventBox()
             evbox.set_border_width(0)
@@ -184,7 +165,12 @@ class TimesWindow(Gtk.Window):
             iconview.set_item_padding(0)
             iconview.set_item_width(24+8)   # 8 pixels for the right side
             iconview.set_pixbuf_column(0)
-            liststore.append(row=None)
+            if zone == 'UTC':
+                liststore.append([ Gtk.IconTheme.get_default().load_icon(icons['UTC'], 24, 0) ])
+            elif offset == home_offset:
+                liststore.append([ Gtk.IconTheme.get_default().load_icon(icons['home'], 24, 0) ])
+            else:
+                liststore.append(row=None)
 
             # xalign=0 is LEFT, 0.5 is CENTER, 1.0 is RIGHT
             # label.set_justify(Gtk.Justification.LEFT) is for multiline labels
@@ -202,7 +188,7 @@ class TimesWindow(Gtk.Window):
             evbox.add(grid)
 
             evbox.connect('button-press-event', self.on_click, i)
-            self.gui.append([evbox, iconview, liststore, labels])
+            self.gui.append([evbox, iconview, labels])
 
             vbox.pack_start(evbox, True, True, 0)
         #---
@@ -216,19 +202,14 @@ class TimesWindow(Gtk.Window):
 
     def redraw_gui(self):
         N = len(self.tzlist)
-        if rotate_list_to_daylight or self.rotation == -1:
-            rotation = tzlist_rotation(self.tzlist)
-            pix_update = (self.rotation != rotation)
-            self.rotation = rotation
-        else:
-            pix_update = False
-        for i in range(N):
-            k = (self.rotation+i) % N
+        for k in range(N):
             # the tzlist source:
             (zone, city, country, offset, hr) = self.tzlist[k]
+            # the GUI target:
+            (evbox, iconview, labels) = self.gui[k]
 
             set_zone(zone)
-            hr = int(time.strftime('%H'))
+            hr = time.localtime()[3]
             self.tzlist[k][-1] = hr
             if workhours[0] <= hr < workhours[1]:
                 phase = 'work'
@@ -236,18 +217,6 @@ class TimesWindow(Gtk.Window):
                 phase = 'day'
             else:
                 phase = 'rest'
-
-            # the GUI target:
-            (evbox, iconview, liststore, labels) = self.gui[i]
-            if pix_update:
-                liststore.clear()
-                if zone == 'UTC':
-                    liststore.append([ Gtk.IconTheme.get_default().load_icon(icons['UTC'], 24, 0) ])
-                elif offset == home_offset:
-                    liststore.append([ Gtk.IconTheme.get_default().load_icon(icons['home'], 24, 0) ])
-                else:
-                    liststore.append(row=None)
-
             bg = Gdk.color_parse( bgcolors[phase] )
             iconview.modify_bg(Gtk.StateType.NORMAL, bg)
             evbox.modify_bg(Gtk.StateType.NORMAL, bg)
@@ -258,8 +227,6 @@ class TimesWindow(Gtk.Window):
                 fg = fgcolors[phase][0], fgcolors[phase][1]
             fmt0 = '<span foreground="%s" face="%s" size="%s">' % (fg[0], fface[0], fsize[0])
             fmt1 = '<span foreground="%s" face="%s" size="%s">' % (fg[1], fface[1], fsize[1])
-
-            # column width set by upper fields, monospace font char count: 17, 13, 6
             roff = rel_offset(self.local_offset, offset)
             fmt = '%-'+str(self.citylen+1)+'s'
             labels[0].set_markup(fmt0 + fmt % city + '</span>')
@@ -276,10 +243,7 @@ class TimesWindow(Gtk.Window):
         GObject.timeout_add(1000, self.refresh)
 
     def on_click(self, widget, event, gui_index):
-        N = len(self.tzlist)
-        k = (self.rotation+gui_index) % N
-        offset = self.tzlist[k][-2]
-        self.local_offset = offset
+        self.local_offset = self.tzlist[gui_index][-2]
         self.redraw_gui()
 
 def leave(arg0, arg1):
