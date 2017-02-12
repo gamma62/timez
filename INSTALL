@@ -1,0 +1,20 @@
+
+Run it as easy: python timez.py
+
+Dependencies: python, python-gtk2, python-gi, gnome-icon-theme
+
+Install like a package:
+
+PREFIX shall be $HOME or maybe /usr/local
+
+cp timez.py   $PREFIX/lib/python2.7/timez.py
+
+cp start_timez.sh   $PREFIX/bin/start_timez.sh
+chmod 755   $PREFIX/bin/start_timez.sh
+
+cp timez.desktop   $HOME/.local/share/applications/timez.desktop
+
+Configuration:
+
+Copy sample.tzlist to $HOME/.timez and edit it, add/remove cities in the required format. See some example tools in util subdirectory. Some resorces can be changed also in timez.py, like colors, icon names, office hours.
+
