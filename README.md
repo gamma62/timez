@@ -7,11 +7,24 @@ Useful for people working in global groups.
 See the screenshots.
 
 
+
 Run it as easy: python timez.py
 
 Dependencies: python, python-gtk2, python-gi, gnome-icon-theme
 
-How does it work? TimeZ reads list of cities with timezone setting and displays their time in a small python-gtk widget. The display focuses on work hours, around these the day has grey and the rest almost black background. Less then 300 lines of code. The location order is East to West now.
+How does it work? TimeZ reads list of cities with timezone setting and displays their time in a small python-gtk widget.
+
+If rotation is in effect the display focuses on work hours, around these the day hours have grey and the rest almost black background.
+
+The top-down location order is East to West now, but reordering can be switched off.
+
+Options: 
+  -n   no reordering of locations
+  -r   rotate locations to have work hours in the middle
+  (rotation does reordering, default is reorder without rotation)
+
+TimeZ is less then 300 lines of code.
+
 
 
 Files:

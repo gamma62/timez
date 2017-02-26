@@ -16,7 +16,7 @@ chmod 755   $PREFIX/bin/start_timez.sh
 cp timez.desktop   $PREFIX/share/applications/timez.desktop
 
 
-Install for yourself, add to the applications menu:
+Install for yourself, add to the applications menu (for example):
 
 cp timez.py   $HOME/lib/python2.7/timez.py
 
