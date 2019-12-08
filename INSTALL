@@ -3,6 +3,12 @@ Run it as easy: python timez.py
 
 Dependencies: python, python-gtk2, python-gi, gnome-icon-theme
 
+New packages to be INSTALLED:
+py27-gobject3: 3.18.2
+pygobject3-common: 3.18.2
+gnome-icon-theme: 3.12.0_1
+gnome-icon-theme-symbolic: 3.12.0
+
 
 Install like public a package, one example:
 
