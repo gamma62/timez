@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 
 # TimeZ is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -36,8 +36,10 @@ hcolors = {'work': ('navy blue', 'medium blue'),
            'day': ('navy blue', 'medium blue'),
            'rest': ('navy blue', 'navy blue')}
 # font description for the 1st and 2nd line
+#fface = ('monospace', 'sans')
+#fsize = ('medium', 'small')
 fface = ('monospace', 'sans')
-fsize = ('medium', 'small')
+fsize = ('large', 'large')
 #---------------------
 
 def usage():
@@ -207,6 +209,7 @@ class TimesWindow(Gtk.Window):
             evbox.add(grid)
 
             evbox.connect('button-press-event', self.on_click, i)
+            evbox.connect('key-press-event', self.keyb_input, None)
             self.gui.append([evbox, iconview, liststore, labels])
 
             vbox.pack_start(evbox, True, True, 0)
@@ -282,7 +285,13 @@ class TimesWindow(Gtk.Window):
         self.local_offset = self.tzlist[k][-2]
         self.redraw_gui()
 
+    def keyb_input(self, widget, event, what):
+        if event.keyval == ord('q'):
+            print '--- keyb event ---'
+            Gtk.main_quit()
+
 def leave(arg0, arg1):
+    print '--- delete event ---'
     Gtk.main_quit()
 
 init_reorder = True
