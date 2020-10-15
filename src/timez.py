@@ -31,7 +31,7 @@ ZONEINFO_FILE = '/usr/share/zoneinfo/'
 ZONEINFO_SET = set(pytz.all_timezones)
 icons = {'UTC':'emblem-web', 'home':'gtk-home'}
 
-# bg colors by phase -- use css
+# bg colors by phase -- use CSS
 css = b'''
     #work { background: grey97; }
     #day { background: grey75; }
@@ -55,11 +55,10 @@ rotate_locations_center_daylight = False
 def usage():
     print("""
 Usage: python3 timez.py [options]
-
 Options:
-  -h    show this help message and exit
-  -n    do not change order of locations on startup
-  -r    rotate locations, keep daylight in the middle
+    -h    show this help message and exit
+    -n    do not change order of locations on startup
+    -r    rotate locations, keep daylight in the middle
 """, file=sys.stderr)
     quit()
 
@@ -86,9 +85,7 @@ def get_tzlist():
     """
     if not os.path.isfile(TZLIST):
         something_like_usage('enoent')
-        #--- does not return
     tzlist = []
-    maxcitylen = 14
     with open(TZLIST, 'r') as f:
         for raw in f:
             line = raw.strip()
@@ -107,31 +104,27 @@ def get_tzlist():
                     tzlist.insert(i, [zone, city, country, offset])
                 else:
                     tzlist.append([zone, city, country, offset])
-                if len(city) > maxcitylen:
-                    maxcitylen = len(city)
             else:
                 print(f'Error: {zone} not found, setting ignored', file=sys.stderr)
     if len(tzlist) == 0:
         something_like_usage('empty')
-        #--- does not return
-    return (tzlist, maxcitylen)
+    citylen = max((len(item[1]) for item in tzlist))
+    return (tzlist, max(14, citylen))
 
 def gui_rotation(hours, N):
     """
     Calculate the necessary row rotation based on hours
     """
     k = 0
-    # find first night hour (maybe no one)
+    # find first Night hour (maybe no one)
     for k in range(N):
         if not (daylight[0] <= hours[k][0] < daylight[1]):
-            # night
-            break
+            break   # outside daylight -> only night
     first = k
-    # find first hour after night (maybe no one)
+    # find first hour after Night (maybe no one)
     for k in range(first, N+first):
         if daylight[0] <= hours[k%N][0] < daylight[1]:
-            # after night
-            break
+            break   # within daylight -> not night
     return k%N
 
 def set_zone(zone):
@@ -143,7 +136,6 @@ def set_zone(zone):
             return False
     else:
         if not os.path.isfile(ZONEINFO_FILE+zone):
-            # ZONEINFO_FILE+zone path not found
             return False
     os.environ['TZ'] = zone
     time.tzset()
@@ -151,7 +143,7 @@ def set_zone(zone):
 
 def base_offset():
     """
-    Calculate the offset in minutes from UTC in the current timezone setting, with DST.
+    Calculate the offset in minutes from UTC in the current timezone, with DST.
     """
     # off = -time.altzone//60 if time.localtime().tm_isdst else -time.timezone//60
     # but in some rare cases this is wrong
@@ -200,8 +192,9 @@ class TimesWindow(Gtk.Window):
         self.rendering = [ (0,"")+("",)*6 for i in range(self.N) ]
         self.gui = []
         self.rotation = -1   # flag for the initial (or forced) icon update
+        self.sentinel = time.gmtime()[3:6]
 
-        # css for the background color changes
+        # CSS for the background color changes
         screen = Gdk.Screen.get_default()
         style_provider = Gtk.CssProvider()
         style_provider.load_from_data(css)
@@ -216,7 +209,6 @@ class TimesWindow(Gtk.Window):
             evbox = Gtk.EventBox()
             evbox.set_border_width(0)
             evbox.set_size_request(-1, 10)
-            evbox.set_name('day')   # for css
 
             # one grid in the evbox
             grid = Gtk.Grid()
@@ -231,7 +223,6 @@ class TimesWindow(Gtk.Window):
             iconview.set_item_padding(0)
             iconview.set_item_width(24+8)   # 8 pixels for the right side
             iconview.set_pixbuf_column(0)
-            iconview.set_name('day')   # for css
             liststore.append(row=None)
 
             # the labels (2 rows and 3 columns)
@@ -251,14 +242,13 @@ class TimesWindow(Gtk.Window):
             grid.attach(labels[4], 2, 1, 1, 1)
             grid.attach(labels[5], 3, 1, 1, 1)
 
+            # Gtk.Window -> Gtk.Box -> [ Gtk.EventBox -> Gtk.Grid() ]
             evbox.add(grid)
             evbox.connect('button-press-event', self.on_click, i)
             evbox.connect('key-press-event', self.keyb_input, None)
-
-            # glue: Gtk.Window -> Gtk.Box -> [ Gtk.EventBox ... ]
             vbox.pack_start(evbox, True, True, 0)
 
-            # save references for regular update
+            # save references for updates
             self.gui.append([evbox, iconview, liststore, labels])
 
         self.redraw_gui()
@@ -277,10 +267,14 @@ class TimesWindow(Gtk.Window):
             (zone, city, country, offset) = self.tzlist[k]
             set_zone(zone)
             hr = time.localtime()[3]
-
             phase = 'work' if (workhours[0] <= hr < workhours[1]) else \
                     'day' if (daylight[0] <= hr < daylight[1]) else \
                     'rest'
+
+            # show phase value change before rotation
+            prev_phase = self.rendering[k][1]
+            if prev_phase and phase != prev_phase:
+                print(f'  phase change: {prev_phase} -> {phase} ({hr}) {city}')
 
             # the labels
             fmt = '%-'+str(self.citylen+1)+'s'
@@ -290,8 +284,7 @@ class TimesWindow(Gtk.Window):
                 '%-6s' % rel_offset(self.local_offset, offset),
                 country,
                 time.strftime('%a, %Y.%m.%d'),
-                time.strftime('%Z'),
-                self.rendering[k][1])   # previous phase value
+                time.strftime('%Z'))
 
         # check if we need icon updates
         icon_update = False
@@ -299,9 +292,8 @@ class TimesWindow(Gtk.Window):
             rotation = gui_rotation(self.rendering, self.N)
             icon_update = (self.rotation != rotation)
             if icon_update and self.rotation != -1:
-                print(f'  rotation: {self.rotation} -> {rotation}')
-                print(f'  ... old: {*self.tzlist[self.rotation][:], *self.rendering[self.rotation][:2]}')
-                print(f'  ... new: {*self.tzlist[rotation][:], *self.rendering[rotation][:2]}')
+                print(f'  rotation change: {self.rotation} -> {rotation}', end=' ')
+                print(f'({self.tzlist[self.rotation][1]} -> {self.tzlist[rotation][1]})')
             self.rotation = rotation
         elif self.rotation == -1:
             icon_update = True
@@ -312,13 +304,7 @@ class TimesWindow(Gtk.Window):
 
             (evbox, iconview, liststore, labels) = self.gui[i]
             (zone, city, country, offset) = self.tzlist[k]
-            (hr, phase, s0, s1, s2, s3, s4, s5, prev_phase) = self.rendering[k]
-
-            if prev_phase and phase != prev_phase:
-                print(f'  phase change: {prev_phase} -> {phase} ({hr}) {city}')
-                #print(f'  ... {zone}, {city}, {country}, {offset}, {hr}')
-                #print(f'  ... [{s0}] [{s1}] [{s2}]')
-                #print(f'  ... [{s3}] [{s4}] [{s5}]')
+            (hr, phase, s0, s1, s2, s3, s4, s5) = self.rendering[k]
 
             if icon_update:
                 liststore.clear()
@@ -329,12 +315,12 @@ class TimesWindow(Gtk.Window):
                 else:
                     liststore.append(row=None)
 
-            # background color for the icon and the labels, set color with css
+            # background color for the icon and the labels, set color with CSS
             iconview.set_name(phase)
             evbox.set_name(phase)
 
             # labels: foreground color, face, size with pango markup
-            highlight = offset == self.home_offset or offset == self.local_offset
+            highlight = (offset == self.home_offset or offset == self.local_offset)
             fmt0 = '<span foreground="%s" face="%s" size="%s">' % (hicolors[phase][0] if highlight else fgcolors[phase][0])
             fmt1 = '<span foreground="%s" face="%s" size="%s">' % (hicolors[phase][1] if highlight else fgcolors[phase][1])
             labels[0].set_markup(fmt0 + s0 + '</span>')
@@ -346,9 +332,12 @@ class TimesWindow(Gtk.Window):
         return
 
     def refresh(self):
-        sec = time.gmtime()[5]
-        if sec == 0:
+        # refresh in every minute (second is 0)
+        # and also on every hour:minute jump, like resume
+        sentinel = time.gmtime()[3:6]
+        if sentinel[2] == 0 or self.sentinel[:2] != sentinel[:2]:
             self.redraw_gui()
+        self.sentinel = sentinel
         return True
 
     def timerstart(self):
@@ -356,22 +345,15 @@ class TimesWindow(Gtk.Window):
         GLib.timeout_add(1000, self.refresh)
 
     def on_click(self, widget, event, gui_index):
-        global rotate_locations_center_daylight
         button = event.get_button()[1]
-        print(f'--- click button={button} ---')
         if button == 1:
             # this row shall be the start for relative offset calculations
             k = (self.rotation+gui_index) % self.N
             self.local_offset = self.tzlist[k][-1]
             print(f'  set local: [{self.tzlist[k][1]}] ---')
-            self.print_base_configuration()
             self.redraw_gui()
         elif button == 2:
-            # toggle rotation
-            rotate_locations_center_daylight = not rotate_locations_center_daylight
-            self.rotation = -1   # force icon update
-            print(f'  set rotation: {"On" if rotate_locations_center_daylight else "Off"}')
-            self.redraw_gui()
+            self.print_base_configuration()
         elif button == 3:
             # this row shall have the home icon
             k = (self.rotation+gui_index) % self.N
@@ -381,9 +363,16 @@ class TimesWindow(Gtk.Window):
             self.redraw_gui()
 
     def keyb_input(self, widget, event, what):
+        global rotate_locations_center_daylight
         if event.keyval == ord('q'):
             print(f'--- keyb input ---')
             Gtk.main_quit()
+        elif event.keyval == ord('r'):
+            # toggle rotation
+            rotate_locations_center_daylight = not rotate_locations_center_daylight
+            self.rotation = -1   # force icon update
+            print(f'  set rotation: {"On" if rotate_locations_center_daylight else "Off"}')
+            self.redraw_gui()
 
 def leave(arg0, arg1):
     print('--- delete event ---')
