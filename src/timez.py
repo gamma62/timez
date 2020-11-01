@@ -12,23 +12,21 @@
 
 import os
 import sys
-import time
-import re
+import tzlocal
+import datetime
 import pytz
+import re
+import requests
 import gi
 
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
 from gi.repository.GdkPixbuf import Pixbuf
 
-#--- configuration ---
 TZLIST = os.environ.get('HOME') + '/.timez'
+# see /usr/share/zoneinfo or pytz.all_timezones
 daylight = (7, 19)   # potential work hours, the rest is night
 workhours = (9, 17)   # core time [9:00 to 17:59]
-
-#--- system resources ---
-ZONEINFO_FILE = '/usr/share/zoneinfo/'
-ZONEINFO_SET = set(pytz.all_timezones)
 icons = {'UTC':'emblem-web', 'home':'gtk-home'}
 
 # bg colors by phase -- use CSS
@@ -46,115 +44,78 @@ hicolors = {'work': (('navy blue', 'monospace', 'medium'), ('medium blue', 'sans
             'day':  (('navy blue', 'monospace', 'medium'), ('medium blue', 'sans', 'small')),
             'rest': (('navy blue', 'monospace', 'medium'), ('navy blue',   'sans', 'small'))}
 
-#--- globals ---
-initial_reorder_locations = True
-rotate_locations_center_daylight = False
-
-#---------------------
-
 def usage():
-    print("""
-Usage: python3 timez.py [options]
-Options:
-    -h    show this help message and exit
-    -n    do not change order of locations on startup
-    -r    rotate locations, keep daylight in the middle
+    print(f"""
+Usage: python3 timez.py [configuration_file]
+    Default configuration file: {TZLIST}
 """, file=sys.stderr)
     quit()
 
 def something_like_usage(reason):
     if reason == 'enoent' or reason == 'empty':
         if reason == 'enoent':
-            print('>>>', TZLIST, 'file does not exist', file=sys.stderr)
+            print(f'Configuration file [{TZLIST}] does not exist', file=sys.stderr)
         elif reason == 'empty':
-            print('>>>', TZLIST, 'file has no zone configuration', file=sys.stderr)
-        print('>>> This file should contain something like this:')
-        print('# lines in this file must have TAB separated fields,')
-        print('# at least 3 fields: Zone City Country')
-        print('# find valid Zone names under', ZONEINFO_FILE)
-        print('Pacific/Auckland	Auckland	New Zealand')
-        print('Europe/Budapest	Budapest	Hungary')
-        print('America/Halifax	Halifax	Canada')
-        print('>>> Have fun!')
+            print(f'Configuration file [{TZLIST}] has no configuration', file=sys.stderr)
+        print("""
+>>> This file should contain something like this:
+# lines in this file must have TAB separated fields,
+# and at least 3 items: Zone City Country
+Pacific/Auckland	Auckland	New Zealand
+Europe/Budapest		Budapest	Hungary
+America/Halifax		Halifax		Canada
+>>> Have fun!
+""", file=sys.stderr)
     quit()
 
-def get_tzlist():
+def get_tzlist(home_zone):
     """
-    Parse the list of timezones: TAB separated items, use the first three,
-    skip empty and comment lines. Return the list.
+    Parse the configuration file: TAB separated items, zone, city, country, lat, lon
+    skip empty and comment lines. Double quotes will be removed, TABs squeezed.
+    Return the configuration list and the index of first item with home_zone.
     """
     if not os.path.isfile(TZLIST):
         something_like_usage('enoent')
+
     tzlist = []
+    utcnow = datetime.datetime.utcnow()
+    home_index = -1
     with open(TZLIST, 'r') as f:
         for raw in f:
             line = raw.strip()
-            if len(line) == 0 or re.match(r'^[ \t]*#', line):
+            if len(line) == 0 or re.match(r'^[ \t]*#|[ \t]*$', line):
                 continue
-            items = line.replace('"', '').split('\t')
-            if len(items) < 3:
-                continue
-            (zone, city, country) = items[:3]
-            if set_zone(zone):
-                offset = base_offset()
-                if initial_reorder_locations:
-                    i = 0
-                    while i < len(tzlist) and offset <= tzlist[i][-1]:
-                        i = i+1
-                    tzlist.insert(i, [zone, city, country, offset])
-                else:
-                    tzlist.append([zone, city, country, offset])
+            line = line.replace('"', '')
+            items = re.split('\t+', line)
+            if len(items) >= 5:
+                (zone, city, country, lat, lon) = items[:5]
             else:
-                print(f'Error: {zone} not found, setting ignored', file=sys.stderr)
+                (zone, city, country, lat, lon) = items[:3] + ['0.0', '0.0']
+            try:
+                offset = base_offset(utcnow, zone)
+            except pytz.UnknownTimeZoneError:
+                print(f'Error: {zone} ignored', file=sys.stderr)
+                continue
+            tzlist.append([zone, city, country, lat, lon, offset, ''])
+            if home_index == -1 and zone == home_zone:
+                home_index = len(tzlist)-1
+
     if len(tzlist) == 0:
         something_like_usage('empty')
-    citylen = max((len(item[1]) for item in tzlist))
-    return (tzlist, max(14, citylen))
 
-def gui_rotation(hours, N):
-    """
-    Calculate the necessary row rotation based on hours
-    """
-    k = 0
-    # find first Night hour (maybe no one)
-    for k in range(N):
-        if not (daylight[0] <= hours[k][0] < daylight[1]):
-            break   # outside daylight -> only night
-    first = k
-    # find first hour after Night (maybe no one)
-    for k in range(first, N+first):
-        if daylight[0] <= hours[k%N][0] < daylight[1]:
-            break   # within daylight -> not night
-    return k%N
+    clen = max((len(item[1]) for item in tzlist))
+    clen = max(14, clen)
+    for item in tzlist:
+        item[1] = (item[1]+" "*clen)[:clen]
 
-def set_zone(zone):
-    """
-    Change timezone to zone after check. Return success of setting.
-    """
-    if ZONEINFO_SET:
-        if zone not in ZONEINFO_SET:
-            return False
-    else:
-        if not os.path.isfile(ZONEINFO_FILE+zone):
-            return False
-    os.environ['TZ'] = zone
-    time.tzset()
-    return True
+    return (tzlist, home_index)
 
-def base_offset():
+def base_offset(utcnow, zone):
     """
-    Calculate the offset in minutes from UTC in the current timezone, with DST.
+    Calculate the actual offset in minutes from UTC of given zone.
     """
-    # off = -time.altzone//60 if time.localtime().tm_isdst else -time.timezone//60
-    # but in some rare cases this is wrong
-    z = int(time.strftime('%z'), base=10)
-    if z == 0:
-        off = 0
-    else:
-        sign = -1 if z < 0 else +1
-        z = abs(z)
-        off = sign * ((z//100)*60 + z%100)
-    return off
+    dt = pytz.utc.localize( utcnow ).astimezone( pytz.timezone(zone) )
+    return dt.utcoffset().days * 24*60 + dt.utcoffset().seconds // 60
 
 def rel_offset(baseoff, target):
     """
@@ -164,10 +125,6 @@ def rel_offset(baseoff, target):
     if off == 0:
         s = '0'
     else:
-        if off > 13*60:
-            off = off - 24*60
-        elif off < -12*60:
-            off = off + 24*60
         if off % 60 == 0:
             s = '%+d' % (off//60)
         elif off < 0:
@@ -181,18 +138,14 @@ class TimesWindow(Gtk.Window):
 
     def __init__(self):
         Gtk.Window.__init__(self, title='TimeZ')
-
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.add(vbox)
 
-        self.home_offset = base_offset()   # does not change, except with DST
-        self.local_offset = self.home_offset
-        (self.tzlist, self.citylen) = get_tzlist()
+        self.tzlist, self.home_index = get_tzlist( tzlocal.get_localzone().zone )
         self.N = len(self.tzlist)
-        self.rendering = [ (0,"")+("",)*6 for i in range(self.N) ]
+        self.local_index = max(0, self.home_index)
+        self.local_offset = self.tzlist[self.local_index][5]
         self.gui = []
-        self.rotation = -1   # flag for the initial (or forced) icon update
-        self.sentinel = time.gmtime()[3:6]
 
         # CSS for the background color changes
         screen = Gdk.Screen.get_default()
@@ -201,6 +154,9 @@ class TimesWindow(Gtk.Window):
         style_context = Gtk.StyleContext()
         style_context.add_provider_for_screen(screen, style_provider,
                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION) 
+
+        self.utc_icon = Gtk.IconTheme.get_default().load_icon(icons['UTC'], 24, 0)
+        self.home_icon = Gtk.IconTheme.get_default().load_icon(icons['home'], 24, 0)
 
         # create the widget structure and save to self.gui
         for i in range(self.N):
@@ -251,67 +207,55 @@ class TimesWindow(Gtk.Window):
             # save references for updates
             self.gui.append([evbox, iconview, liststore, labels])
 
-        self.redraw_gui()
+        self.utcnow = datetime.datetime.utcnow()
         self.print_base_configuration()
+        self.redraw_gui(icon_update=True)
         return
 
     def print_base_configuration(self):
         print(f'--- daylight [{daylight[0]}, {daylight[1]})')
         print(f'--- workhours [{workhours[0]}, {workhours[1]})')
-        print(f'--- list rotation: {"On" if rotate_locations_center_daylight else "Off"}')
         return
 
-    def redraw_gui(self):
-        # calculate zone dependent values into self.rendering
+    def redraw_gui(self, icon_update=False):
+
+        # notify about the base offset change (after selecting new row or DST jump of that row)
+        zone = self.tzlist[self.local_index][0]
+        offset = base_offset( self.utcnow, zone )
+        if offset != self.local_offset:
+            dt = pytz.utc.localize( self.utcnow ).astimezone( pytz.timezone(zone) )
+            print(f'  local offset change: ({zone}) {self.local_offset} -> {offset} ({dt.tzname()})')
+            self.local_offset = offset
+
         for k in range(self.N):
-            (zone, city, country, offset) = self.tzlist[k]
-            set_zone(zone)
-            hr = time.localtime()[3]
+            (zone, city, country) = self.tzlist[k][0:3]
+            offset = base_offset( self.utcnow, zone )
+            dt = pytz.utc.localize( self.utcnow ).astimezone( pytz.timezone(zone) )
+            hr = dt.hour
             phase = 'work' if (workhours[0] <= hr < workhours[1]) else \
                     'day' if (daylight[0] <= hr < daylight[1]) else \
                     'rest'
 
-            # show phase value change before rotation
-            prev_phase = self.rendering[k][1]
+            # show offset value change (DST, any row)
+            prev_offset = self.tzlist[k][5]
+            if offset != prev_offset:
+                print(f'  offset change: {city} {prev_offset} -> {offset} ({dt.tzname()})')
+            self.tzlist[k][5] = offset
+
+            # show phase value change (regular, any row)
+            prev_phase = self.tzlist[k][6]
             if prev_phase and phase != prev_phase:
-                print(f'  phase change: {prev_phase} -> {phase} ({hr}) {city}')
+                comment = 'time-slip' if self.utcnow.second else f'hour={hr}'
+                print(f'  phase change: {city} {prev_phase} -> {phase} ({comment})')
+            self.tzlist[k][6] = phase
 
-            # the labels
-            fmt = '%-'+str(self.citylen+1)+'s'
-            self.rendering[k] = (hr, phase,
-                fmt % city,
-                '%-15s' % time.strftime('%H:%M'),
-                '%-6s' % rel_offset(self.local_offset, offset),
-                country,
-                time.strftime('%a, %Y.%m.%d'),
-                time.strftime('%Z'))
-
-        # check if we need icon updates
-        icon_update = False
-        if rotate_locations_center_daylight:
-            rotation = gui_rotation(self.rendering, self.N)
-            icon_update = (self.rotation != rotation)
-            if icon_update and self.rotation != -1:
-                print(f'  rotation change: {self.rotation} -> {rotation}', end=' ')
-                print(f'({self.tzlist[self.rotation][1]} -> {self.tzlist[rotation][1]})')
-            self.rotation = rotation
-        elif self.rotation == -1:
-            icon_update = True
-            self.rotation = 0
-
-        for i in range(self.N):
-            k = (self.rotation+i) % self.N
-
-            (evbox, iconview, liststore, labels) = self.gui[i]
-            (zone, city, country, offset) = self.tzlist[k]
-            (hr, phase, s0, s1, s2, s3, s4, s5) = self.rendering[k]
-
+            (evbox, iconview, liststore, labels) = self.gui[k]
             if icon_update:
                 liststore.clear()
                 if zone == 'UTC':
-                    liststore.append([ Gtk.IconTheme.get_default().load_icon(icons['UTC'], 24, 0) ])
-                elif offset == self.home_offset:
-                    liststore.append([ Gtk.IconTheme.get_default().load_icon(icons['home'], 24, 0) ])
+                    liststore.append([ self.utc_icon ])
+                elif k == self.home_index:
+                    liststore.append([ self.home_icon ])
                 else:
                     liststore.append(row=None)
 
@@ -320,59 +264,45 @@ class TimesWindow(Gtk.Window):
             evbox.set_name(phase)
 
             # labels: foreground color, face, size with pango markup
-            highlight = (offset == self.home_offset or offset == self.local_offset)
+            highlight = (k == self.home_index or k == self.local_index)
             fmt0 = '<span foreground="%s" face="%s" size="%s">' % (hicolors[phase][0] if highlight else fgcolors[phase][0])
             fmt1 = '<span foreground="%s" face="%s" size="%s">' % (hicolors[phase][1] if highlight else fgcolors[phase][1])
-            labels[0].set_markup(fmt0 + s0 + '</span>')
-            labels[1].set_markup(fmt0 + s1 + '</span>')
-            labels[2].set_markup(fmt0 + s2 + '</span>')
-            labels[3].set_markup(fmt1 + s3 + '</span>')
-            labels[4].set_markup(fmt1 + s4 + '</span>')
-            labels[5].set_markup(fmt1 + s5 + '</span>')
+            labels[0].set_markup(fmt0 + "%s " % city + '</span>')
+            labels[1].set_markup(fmt0 + '%-15s' % dt.strftime('%H:%M') + '</span>')
+            labels[2].set_markup(fmt0 + '%-6s' % rel_offset(self.local_offset, offset) + '</span>')
+            labels[3].set_markup(fmt1 + "%s " % country + '</span>')
+            labels[4].set_markup(fmt1 + dt.strftime('%a, %Y.%m.%d') + '</span>')
+            labels[5].set_markup(fmt1 + dt.tzname() + '</span>')
         return
 
     def refresh(self):
-        # refresh in every minute (second is 0)
-        # and also on every hour:minute jump, like resume
-        sentinel = time.gmtime()[3:6]
-        if sentinel[2] == 0 or self.sentinel[:2] != sentinel[:2]:
+        # refresh in every minute, and also on every hour:minute jump, like resume
+        utcnow = datetime.datetime.utcnow()
+        if utcnow.second == 0 or (self.utcnow.hour != utcnow.hour or self.utcnow.minute != utcnow.minute):
+            self.utcnow = utcnow
             self.redraw_gui()
-        self.sentinel = sentinel
         return True
 
     def timerstart(self):
-        # the method must return True to continue
-        GLib.timeout_add(1000, self.refresh)
+        # interval in miliseconds, the function must return True to continue
+        GLib.timeout_add(interval=1000, function=self.refresh)
 
     def on_click(self, widget, event, gui_index):
         button = event.get_button()[1]
         if button == 1:
-            # this row shall be the start for relative offset calculations
-            k = (self.rotation+gui_index) % self.N
-            self.local_offset = self.tzlist[k][-1]
-            print(f'  set local: [{self.tzlist[k][1]}] ---')
+            # this row shall be the base for relative offset calculation
+            self.local_index = gui_index
+            print(f'--- set local base: {self.tzlist[gui_index][1]}')
             self.redraw_gui()
         elif button == 2:
             self.print_base_configuration()
         elif button == 3:
-            # this row shall have the home icon
-            k = (self.rotation+gui_index) % self.N
-            self.home_offset = self.tzlist[k][-1]
-            self.rotation = -1   # force icon update
-            print(f'  set home icon: [{self.tzlist[k][1]}] ---')
-            self.redraw_gui()
+            pass
 
     def keyb_input(self, widget, event, what):
-        global rotate_locations_center_daylight
         if event.keyval == ord('q'):
             print(f'--- keyb input ---')
             Gtk.main_quit()
-        elif event.keyval == ord('r'):
-            # toggle rotation
-            rotate_locations_center_daylight = not rotate_locations_center_daylight
-            self.rotation = -1   # force icon update
-            print(f'  set rotation: {"On" if rotate_locations_center_daylight else "Off"}')
-            self.redraw_gui()
 
 def leave(arg0, arg1):
     print('--- delete event ---')
@@ -380,19 +310,17 @@ def leave(arg0, arg1):
 
 if __name__ == '__main__':
     for option in os.sys.argv[1:]:
-        if option == "-n":
-            initial_reorder_locations = False
-        elif option == "-r":
-            rotate_locations_center_daylight = True
-            initial_reorder_locations = True
-        elif os.path.isfile(option):
-            TZLIST = option
-        else:
-            print(f'invalid option [{option}]', file=sys.stderr)
+        if option == "-h" or option == "--help":
             usage()
+        else:
+            TZLIST = option
     window = TimesWindow()
     window.connect("delete-event", leave)
     window.show_all()
     window.timerstart()
-    Gtk.main()
+    try:
+        Gtk.main()
+    except KeyboardInterrupt:
+        print('--- keyb interrupt ---')
+        quit()
 
