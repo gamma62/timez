@@ -16,7 +16,6 @@ import tzlocal
 import datetime
 import pytz
 import re
-import requests
 import gi
 
 gi.require_version('Gtk', '3.0')
@@ -87,16 +86,16 @@ def get_tzlist(home_zone):
                 continue
             line = line.replace('"', '')
             items = re.split('\t+', line)
-            if len(items) >= 5:
-                (zone, city, country, lat, lon) = items[:5]
+            if len(items) >= 3:
+                (zone, city, country) = items[:3]
             else:
-                (zone, city, country, lat, lon) = items[:3] + ['0.0', '0.0']
+                continue
             try:
                 offset = base_offset(utcnow, zone)
             except pytz.UnknownTimeZoneError:
                 print(f'Error: {zone} ignored', file=sys.stderr)
                 continue
-            tzlist.append([zone, city, country, lat, lon, offset, ''])
+            tzlist.append([zone, city, country, offset, ''])
             if home_index == -1 and zone == home_zone:
                 home_index = len(tzlist)-1
 
@@ -144,7 +143,7 @@ class TimesWindow(Gtk.Window):
         self.tzlist, self.home_index = get_tzlist( tzlocal.get_localzone().zone )
         self.N = len(self.tzlist)
         self.local_index = max(0, self.home_index)
-        self.local_offset = self.tzlist[self.local_index][5]
+        self.local_offset = self.tzlist[self.local_index][-2]
         self.gui = []
 
         # CSS for the background color changes
@@ -237,17 +236,17 @@ class TimesWindow(Gtk.Window):
                     'rest'
 
             # show offset value change (DST, any row)
-            prev_offset = self.tzlist[k][5]
+            prev_offset = self.tzlist[k][-2]
             if offset != prev_offset:
                 print(f'  offset change: {city} {prev_offset} -> {offset} ({dt.tzname()})')
-            self.tzlist[k][5] = offset
+            self.tzlist[k][-2] = offset
 
             # show phase value change (regular, any row)
-            prev_phase = self.tzlist[k][6]
+            prev_phase = self.tzlist[k][-1]
             if prev_phase and phase != prev_phase:
                 comment = 'time-slip' if self.utcnow.second else f'hour={hr}'
                 print(f'  phase change: {city} {prev_phase} -> {phase} ({comment})')
-            self.tzlist[k][6] = phase
+            self.tzlist[k][-1] = phase
 
             (evbox, iconview, liststore, labels) = self.gui[k]
             if icon_update:
