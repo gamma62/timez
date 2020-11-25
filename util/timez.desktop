@@ -1,12 +1,11 @@
-#!/usr/bin/env xdg-open
 [Desktop Entry]
 Version=1.0
 Type=Application
+NoDisplay=false
 Name=TimeZ
 Comment=Clock with timezones around the Globe
-Icon=mate-panel-clock
-Exec=start_timez.sh
-NoDisplay=false
-Categories=Utility;
-StartupNotify=false
+Exec=timez
+Icon=clock
 Terminal=false
+Categories=GNOME;GTK;Utility;
+StartupNotify=false
