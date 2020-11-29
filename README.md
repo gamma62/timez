@@ -37,5 +37,6 @@ timez.desktop     sample configuration to run TimeZ on mate desktop (FreeBSD)
 About the rootes and inspiration.
 
 I have seen some timezone clocks and tools, the closest to TimeZ is https://github.com/afcowie/slashtime which 
-has an interesting interface, I got many ideas from it. Unfortunately slashtime is based on java-gnome what is not ported to FreeBSD. Nowadays I use python for rapid prototyping, so the langauage selection was done. TimeZ uses python2.7 with gi.repository, some gnome dependencies like some theme icons and so. TimeZ runs on FreeBSD and on Linux.
+has an interesting interface, I got many ideas from it. Unfortunately slashtime is based on java-gnome what is not ported to FreeBSD. Nowadays I use python for rapid prototyping, so the language selection was done.
+TimeZ uses python3 with gi.repository, some gnome dependencies like some theme icons. TimeZ runs on FreeBSD and on Linux.
 
