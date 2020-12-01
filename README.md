@@ -10,20 +10,16 @@ See the screenshots.
 
 Run it as easy: python timez.py
 
-Dependencies: python, python-gtk2, python-gi, gnome-icon-theme
+Dependencies: python, python-gtk3, python-gi, gnome-icon-theme
 
-How does it work? TimeZ reads list of cities with timezone setting and displays their time in a small python-gtk widget.
+How does it work? TimeZ reads list of cities with timezone setting and displays their time in a pyGtk widget.
 
-If rotation is in effect the display focuses on work hours, around these the day hours have grey and the rest almost black background.
-
-The top-down location order is East to West now, but reordering can be switched off.
+The recommended top-down location order is East to West.
 
 Options: 
-  -n   no reordering of locations
-  -r   rotate locations to have work hours in the middle
-  (rotation does reordering, default is reorder without rotation)
+  [-n] timez configuration
 
-TimeZ is less then 300 lines of code.
+Original TimeZ was less then 300 lines of code.
 
 
 
@@ -33,7 +29,7 @@ timez.py          the main python script
 
 sample.tzlist     sample file for $HOME/.timez
 
-start_timez.sh    sample shell script to run TimeZ in a desktop environment (FreeBSD or Linux)
+timez             sample shell script to run TimeZ in a desktop environment (FreeBSD or Linux)
 
 timez.desktop     sample configuration to run TimeZ on mate desktop (FreeBSD)
 
@@ -41,5 +37,6 @@ timez.desktop     sample configuration to run TimeZ on mate desktop (FreeBSD)
 About the rootes and inspiration.
 
 I have seen some timezone clocks and tools, the closest to TimeZ is https://github.com/afcowie/slashtime which 
-has an interesting interface, I got many ideas from it. Unfortunately slashtime is based on java-gnome what is not ported to FreeBSD. Nowadays I use python for rapid prototyping, so the langauage selection was done. TimeZ uses python2.7 with gi.repository, some gnome dependencies like some theme icons and so. TimeZ runs on FreeBSD and on Linux.
+has an interesting interface, I got many ideas from it. Unfortunately slashtime is based on java-gnome what is not ported to FreeBSD. Nowadays I use python for rapid prototyping, so the language selection was done.
+TimeZ uses python3 with gi.repository, some gnome dependencies like some theme icons. TimeZ runs on FreeBSD and on Linux.
 
