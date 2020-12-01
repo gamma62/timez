@@ -9,3 +9,10 @@ Icon=clock
 Terminal=false
 Categories=GNOME;GTK;Utility;
 StartupNotify=false
+Actions=2.0;
+
+[Desktop Action 2.0]
+Name=TimeZ 2.0
+Comment=Multiple TZ clocks with Sunrise-Sunset information
+Exec=timez -2.0
+Icon=clock

@@ -1,6 +1,11 @@
 #!/bin/sh
 
-python3 ~/timez.py $* &
+if [ "$1" = "-2.0" ]; then
+	shift
+	python3 ~/timez.py -2.0 $*
+else
+	python3 ~/timez.py $*
+fi
 exit 0
 
 # PID=$!
